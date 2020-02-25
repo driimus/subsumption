@@ -1,4 +1,4 @@
-enum state : int{
+enum state: int {
 	ok = 0,
 	blocked,		// raise
 	freewheeling,	// lock
@@ -8,36 +8,44 @@ enum state : int{
 class Rover {
 
 	// 6 wheels, all OK by default
-	int wheels[6] = {ok};
+	int wheelStatus[6] = {ok};
+	std::vector<std::thread> wheels;
+
 	bool finished = false;
+	bool stuck = false;
+
+	// Random problem generator
+	void genProblem(int affectedWheel) {
+		std::unique_lock<std::mutex> lck(mtx);
+
+		// Wait until the rover is not stuck (problems must not occur in parallel)
+		while (stuck) condVar.wait(lck);
+
+		int problem = ;			// random in range [1, 4)
+		wheelStatus[affectedWheel] = problem;
+
+		// LOG < problems
+		// solveProblems
+		// LOG < problem < action
+	}
 
 public:
+
 	Rover() {
-		// needs a thread for each wheel
+		// LOG Start
+
+		// Initialize a new thread for each wheel
+		for (int i=0; i<wheelStatus.size(); ++i) {
+			wheels.push_back(std::thread(genProblem, i));
+		}
+		for (auto wheel: wheels) {
+			wheel.join();
+		}
 	}
 
-	// to be used by separate threads (5 to 10), each calling with a random delay
-	void genProblem() {
-		int problem = ;			// random in range [1, 4)
-		wheels[affectedWheel] = problem;
-	}
-
-	void genDelayedProblem() {
-		// sleep for random amount of time
-
-		genProblem();
-	}
 }
 
 
 void explore() {
-	// LOG Start
-	for(int section=0; section<5; ++section) {
-		// LOG < section
-		// getProblems
-		// LOG < problems
-		// solveProblems
-			// LOG < problem < action
-	}
 	// LOG End
 }
