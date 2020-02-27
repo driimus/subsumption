@@ -1,6 +1,6 @@
+#pragma once
 
 #include <vector>
-
 #include <thread>
 #include <mutex>
 #include <condition_variable>
@@ -9,19 +9,17 @@
 
 class Rover {
 
-	// 6 wheels, all OK by default
-	static const int WHEELS = 6;
-	int wheelStatus[WHEELS] = {ok};
 	bool finished = false;
 	bool stuck = false;
 
+	std::vector<int> wheelStatus;
 	std::vector<std::vector<std::thread>> wheelSystems;
 
 	std::mutex mtx;
 	std::condition_variable condVar;
 
 	void lock(const int wheel) {
-		while(!finished) {
+		while (!finished) {
 			std::unique_lock<std::mutex> lck(mtx);
 			while (wheelStatus[wheel] != freewheeling) condVar.wait(lck);
 			lck.unlock();
@@ -35,12 +33,12 @@ class Rover {
 
 			condVar.notify_all();
 
-			printf("Locking wheel %d...\n", wheel+1);
+			printf("Locking wheel %d...\n", wheel + 1);
 		}
 	}
 
 	void raise(const int wheel) {
-		while(!finished) {
+		while (!finished) {
 			std::unique_lock<std::mutex> lck(mtx);
 			while (wheelStatus[wheel] != blocked) condVar.wait(lck);
 			lck.unlock();
@@ -54,12 +52,12 @@ class Rover {
 
 			condVar.notify_all();
 
-			printf("Raising wheel %d...\n", wheel+1);
+			printf("Raising wheel %d...\n", wheel + 1);
 		}
 	}
 
 	void lower(const int wheel) {
-		while(!finished) {
+		while (!finished) {
 			std::unique_lock<std::mutex> lck(mtx);
 			while (wheelStatus[wheel] != sinking) condVar.wait(lck);
 			lck.unlock();
@@ -73,12 +71,12 @@ class Rover {
 
 			condVar.notify_all();
 
-			printf("Lowering wheel %d...\n", wheel+1);
+			printf("Lowering wheel %d...\n", wheel + 1);
 		}
 	}
 
 	void earth(const int wheel) {
-		while(!finished) {
+		while (!finished) {
 			std::unique_lock<std::mutex> lck(mtx);
 			while (wheelStatus[wheel] != unknown) condVar.wait(lck);
 			lck.unlock();
@@ -116,11 +114,14 @@ class Rover {
 		}
 	}
 
-public:
+  public:
 
 	// A sensor consists of a random problem generator.
 	auto wheelSensor(const int wheel) -> std::thread {
 		return std::thread(&Rover::generateProblem, this, wheel);
+	}
+	auto earthComms(const int wheel) -> std::thread {
+		return std::thread(&Rover::earth, this, wheel);
 	}
 	auto freewheelingController(const int wheel) -> std::thread {
 		return std::thread(&Rover::lock, this, wheel);
@@ -131,31 +132,26 @@ public:
 	auto sinkingWheelController(const int wheel) -> std::thread {
 		return std::thread(&Rover::lower, this, wheel);
 	}
-	auto passControlToEarth(const int wheel) -> std::thread {
-		return std::thread(&Rover::earth, this, wheel);
-	}
 
-	Rover() {
-		// LOG Start
-
-		// Initialize each wheel on a separate thread.
-		for (int i=0; i<WHEELS; ++i) {
-			wheelSystems.push_back({});
+	// 6 wheels by default, all OK
+	Rover(int wheels = 6) : wheelSystems(wheels), wheelStatus(wheels, ok) {
+		for (int i = 0; i < wheels; ++i) {
 			// The state of each wheel has to be monitored by a sensor.
-			wheelSystems[i].push_back(wheelSensor(i));
+			wheelSystems[i].push_back( wheelSensor(i) );
+
+			// Enable remote-control via communication with Earth.
+			wheelSystems[i].push_back( earthComms(i) );
 
 			// Add a separate controller for each possible state
-			wheelSystems[i].push_back(freewheelingController(i));
-			wheelSystems[i].push_back(blockedWheelController(i));
-			wheelSystems[i].push_back(sinkingWheelController(i));
-
-			wheelSystems[i].push_back(passControlToEarth(i));
+			wheelSystems[i].push_back( freewheelingController(i) );
+			wheelSystems[i].push_back( blockedWheelController(i) );
+			wheelSystems[i].push_back( sinkingWheelController(i) );
 		}
 	}
 
 	~Rover() {
-		for (auto &wheel: wheelSystems) {
-			for (auto &controller: wheel)
+		for (auto &wheel : wheelSystems) {
+			for (auto &controller : wheel)
 				controller.join();
 		}
 	}

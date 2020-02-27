@@ -1,15 +1,5 @@
-#include "rover.hpp"
-#include <thread>
+#include "Rover/rover.hpp"
 
 auto main() -> int {
-	Logger log;
-	Rover rover { log };
-	std::vector<std::thread> problems;
-
-	log << "Starting rover...";
-
-	// Log final rover status
-	log << rover.isStuck() ? "Reached destination." : "Could not reach destination";
-
-	return 0;
+	Rover rover;
 }
