@@ -1,5 +1,3 @@
-#include <random>
-#include <chrono>
 
 #include <vector>
 
@@ -7,35 +5,17 @@
 #include <mutex>
 #include <condition_variable>
 
-
-enum status: int {
-	ok = 0,
-	blocked,		// raise
-	freewheeling,	// lock
-	sinking,		// lower
-	unknown			// earth
-};
-
-auto getRandomInt(int from, int to) -> int {
-	std::uniform_int_distribution<int> range{from, to};
-	std::random_device rnd;
-	return range(rnd);
-}
-
-
-void sleep(int ms) {
-	std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-}
+#include "utils.hpp"
 
 class Rover {
 
-	static const int WHEELS = 6;
 	// 6 wheels, all OK by default
+	static const int WHEELS = 6;
 	int wheelStatus[WHEELS] = {ok};
-	std::vector<std::vector<std::thread>> wheelControllers;
-
 	bool finished = false;
 	bool stuck = false;
+
+	std::vector<std::vector<std::thread>> wheelSystems;
 
 	std::mutex mtx;
 	std::condition_variable condVar;
@@ -111,6 +91,7 @@ class Rover {
 
 			condVar.notify_all();
 
+
 			printf("Passing control to Earth\n");
 		}
 	}
@@ -137,19 +118,20 @@ class Rover {
 
 public:
 
-	auto monitorWheel(const int wheel) -> std::thread {
+	// A sensor consists of a random problem generator.
+	auto wheelSensor(const int wheel) -> std::thread {
 		return std::thread(&Rover::generateProblem, this, wheel);
 	}
-	auto lockWheel(const int wheel) -> std::thread {
+	auto freewheelingController(const int wheel) -> std::thread {
 		return std::thread(&Rover::lock, this, wheel);
 	}
-	auto raiseWheel(const int wheel) -> std::thread {
+	auto blockedWheelController(const int wheel) -> std::thread {
 		return std::thread(&Rover::raise, this, wheel);
 	}
-	auto lowerWheel(const int wheel) -> std::thread {
+	auto sinkingWheelController(const int wheel) -> std::thread {
 		return std::thread(&Rover::lower, this, wheel);
 	}
-	auto passControlToEarth() -> std::thread {
+	auto passControlToEarth(const int wheel) -> std::thread {
 		return std::thread(&Rover::earth, this, wheel);
 	}
 
@@ -158,17 +140,21 @@ public:
 
 		// Initialize each wheel on a separate thread.
 		for (int i=0; i<WHEELS; ++i) {
-			wheelControllers.push_back({});
-			// A well constitues of a random problem generator.
-			wheelControllers[i].push_back(monitorWheel(i));
+			wheelSystems.push_back({});
+			// The state of each wheel has to be monitored by a sensor.
+			wheelSystems[i].push_back(wheelSensor(i));
 
 			// Add a separate controller for each possible state
-			wheelControllers[i].push_back(lockWheel(i));
-			wheelControllers[i].push_back(raiseWheel(i));
-			wheelControllers[i].push_back(lowerWheel(i));
-			wheelControllers[i].push_back(passControlToEarth(i));
+			wheelSystems[i].push_back(freewheelingController(i));
+			wheelSystems[i].push_back(blockedWheelController(i));
+			wheelSystems[i].push_back(sinkingWheelController(i));
+
+			wheelSystems[i].push_back(passControlToEarth(i));
 		}
-		for (auto &wheel: wheelControllers) {
+	}
+
+	~Rover() {
+		for (auto &wheel: wheelSystems) {
 			for (auto &controller: wheel)
 				controller.join();
 		}
