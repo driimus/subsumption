@@ -3,117 +3,84 @@
 
 void Rover::lock(const int wheel) {
 	while (!finished) {
-		std::unique_lock<std::mutex> lck(mtx);
+		u_lock lck(mtx);
 		while (wheelStatus[wheel] != freewheeling) condVar.wait(lck);
-		lck.unlock();
-
-		wheelStatus[wheel] = ok;
-		sleep(500);
-
-		lck.lock();
-		stuck = false;
-		lck.unlock();
-
-		condVar.notify_all();
 
 		printf("Locking wheel %d...\n", wheel + 1);
+		updateWheelStatus(lck, wheel, ok);
 	}
 }
 
 void Rover::raise(const int wheel) {
 	while (!finished) {
-		std::unique_lock<std::mutex> lck(mtx);
+		u_lock lck(mtx);
 		while (wheelStatus[wheel] != blocked) condVar.wait(lck);
-		lck.unlock();
-
-		sleep(300);
-		wheelStatus[wheel] = ok;
-
-		lck.lock();
-		stuck = false;
-		lck.unlock();
-
-		condVar.notify_all();
 
 		printf("Raising wheel %d...\n", wheel + 1);
+		updateWheelStatus(lck, wheel, ok);
 	}
 }
 
 void Rover::lower(const int wheel) {
 	while (!finished) {
-		std::unique_lock<std::mutex> lck(mtx);
+		u_lock lck(mtx);
 		while (wheelStatus[wheel] != sinking) condVar.wait(lck);
-		lck.unlock();
-
-		sleep(700);
-		wheelStatus[wheel] = ok;
-
-		lck.lock();
-		stuck = false;
-		lck.unlock();
-
-		condVar.notify_all();
 
 		printf("Lowering wheel %d...\n", wheel + 1);
+		updateWheelStatus(lck, wheel, ok);
 	}
 }
 
 void Rover::earth(const int wheel) {
 	while (!finished) {
-		std::unique_lock<std::mutex> lck(mtx);
+		u_lock lck(mtx);
 		while (wheelStatus[wheel] != unknown) condVar.wait(lck);
-		lck.unlock();
-
-		wheelStatus[wheel] = ok;
-
-		lck.lock();
-		stuck = false;
-		lck.unlock();
-
-		condVar.notify_all();
-
 
 		printf("Passing control to Earth\n");
+		updateWheelStatus(lck, wheel, ok);
 	}
 }
 
 // Random problem generator
 void Rover::generateProblem(const int wheel) {
 	while (!finished) {
-		std::unique_lock<std::mutex> lck(mtx);
-
+		u_lock lck(mtx);
 		// Wait until the rover solves the current problem if already stuck
 		while (stuck) condVar.wait(lck);
-		lck.unlock();
 
-		int problem = getRandomInt(1, 3);
-		wheelStatus[wheel] = problem;
-
-
-		lck.lock();
-		stuck = true;
-		lck.unlock();
-
-		condVar.notify_all();
-		sleep(1500);
+		int nextProblem = getRandomInt(1, 3);
+		updateWheelStatus(lck, wheel, nextProblem);
 	}
 }
+
+void Rover::updateWheelStatus(u_lock &lck, int wheel, int newStatus) {
+	lck.unlock();
+	wheelStatus[wheel] = newStatus;
+
+	lck.lock();
+	stuck = newStatus != ok;
+	lck.unlock();
+
+	condVar.notify_all();
+	sleep(getRandomInt(300, 999));
+}
+
 
 // A sensor consists of a random problem generator.
 auto Rover::wheelSensor(int wheel) -> std::thread {
 	return std::thread(&Rover::generateProblem, this, wheel);
 }
-auto Rover::earthComms(int wheel) -> std::thread {
-	return std::thread(&Rover::earth, this, wheel);
+auto Rover::earthComms() -> std::thread {
+	return std::thread(&Rover::earth, this);
 }
-auto Rover::freewheelingController(int wheel) -> std::thread {
-	return std::thread(&Rover::lock, this, wheel);
+auto Rover::freewheelingController() -> std::thread {
+	return std::thread(&Rover::lock, this);
 }
-auto Rover::blockedWheelController(int wheel) -> std::thread {
-	return std::thread(&Rover::raise, this, wheel);
+auto Rover::blockedWheelController() -> std::thread {
+	return std::thread(&Rover::raise, this);
 }
-auto Rover::sinkingWheelController(int wheel) -> std::thread {
-	return std::thread(&Rover::lower, this, wheel);
+auto Rover::sinkingWheelController() -> std::thread {
+	return std::thread(&Rover::lower, this);
 }
 
 
@@ -131,11 +98,11 @@ Rover::Rover(int wheels) : wheelSystems(wheels), wheelStatus(wheels, ok) {
 		wheelSystems[i].push_back( blockedWheelController(i) );
 		wheelSystems[i].push_back( sinkingWheelController(i) );
 	}
-}
-
-Rover::~Rover() {
 	for (auto &wheel : wheelSystems) {
 		for (auto &controller : wheel)
 			controller.join();
 	}
+}
+
+Rover::~Rover() {
 }

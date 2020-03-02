@@ -1,5 +1,6 @@
 #include "Rover/rover.hpp"
 
 auto main() -> int {
-	Rover rover;
+	Rover rover(6);
+	rover.explore();
 }
