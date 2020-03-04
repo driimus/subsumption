@@ -1,5 +1,6 @@
 #pragma once
 
+#include <fstream>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -23,17 +24,18 @@ class Rover {
 	bool finished = false;
 
 	vector<std::thread> wheelSystems;
+	std::ofstream logger;
 
 	mutex mtx;
 	condition_variable condVar;
 
-public:
+  public:
 
 	// Initializes a rover with 6 wheels by default.
-	Rover(int wheels = 6) : wheelSystems(wheels) {
+	Rover(int wheels = 6) : wheelSystems(wheels), logger("logs.txt") {
 		// Attach a dedicated sensor for each wheel.
 		for (int i = 0; i < wheels; ++i) {
-			wheelSystems[i] = wheelSensor(i);
+			wheelSystems[i] = wheelSensor(i + 1);
 		}
 
 		// Enable remote-control via communication with Earth.
@@ -51,14 +53,14 @@ public:
 		// Set a random amount of problems to be encountered.
 		totalProblemCount = getRandomInt(5, 8);
 
-		printf("Starting rover...\n" );
+		logger << "Starting to explore...\n";
 		// Start exploring and wait until the rover finishes.
 		moving = true;
 		condVar.notify_all();
 		lck.unlock();
 		for (auto &system : wheelSystems) { system.join(); }
 
-		printf("Finished\n" );
+		logger << "Finished exploring.\n";
 	}
 
 	// A sensor consists of a separate thread running a random problem generator.
@@ -83,11 +85,12 @@ public:
 	}
 
 	~Rover() {
+		logger.close();
 		// Forcefully terminate threads that are not finished.
 		for (auto &system : wheelSystems) { system.~thread(); }
 	}
 
-private:
+  private:
 
 	// Random problem generator
 	void generateProblem(const int wheel) {
@@ -98,7 +101,7 @@ private:
 			if (finished) break;
 
 			int issue = getRandomInt(0, 3);
-			printf("Wheel %i %s\n", wheel, statusMessage[issue].c_str());
+			logger << "Wheel " << wheel << ' ' << statusMessage[issue] << ' ';
 			updateStatus(lck, issue);
 		}
 	}
@@ -112,13 +115,13 @@ private:
 				condVar.wait(lck);
 			if (finished) break;
 
-			printf("%s\n", actionMessage[targetIssue].c_str());
+			logger << actionMessage[targetIssue] << '\n';
 			updateStatus(lck, ok);
 		}
 	}
 
 	// Updates the status of the rover and signals when it's done exploring.
-	void updateStatus(unique_lock<mutex> &lck,const int newStatus) {
+	void updateStatus(unique_lock<mutex> &lck, const int newStatus) {
 		status = newStatus;
 		moving = status == ok;
 
