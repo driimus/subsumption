@@ -17,7 +17,7 @@ enum status: int {
 
 std::vector<std::string> statusMessage = {
 	"is blocked.",
-	"is freewheeling",
+	"is freewheeling.",
 	"is sinking.",
 	"encountered an unknown problem."
 };
