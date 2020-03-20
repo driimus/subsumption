@@ -86,8 +86,6 @@ class Rover {
 
 	~Rover() {
 		logger.close();
-		// Forcefully terminate threads that are not finished.
-		for (auto &system : wheelSystems) { system.~thread(); }
 	}
 
   private:
@@ -116,7 +114,14 @@ class Rover {
 			if (finished) break;
 
 			logger << actionMessage[targetIssue] << '\n';
-			updateStatus(lck, ok);
+
+			// 20% chance of failure.
+			bool actionFailed = getRandomInt(0, 9) > 7;
+			if (targetIssue != unknown && actionFailed) {
+				logger << "ERROR: Unable to perform action. ";
+				updateStatus(lck, unknown);
+			}
+			else updateStatus(lck, ok);
 		}
 	}
 
@@ -131,8 +136,7 @@ class Rover {
 			finished = solvedProblemCount == totalProblemCount;
 		}
 
-		// Random delay of ~1 second.
-		sleep( getRandomFloat(0.7, 1.5) );
+		sleep( getRandomFloat(0.01, 0.05) );
 		lck.unlock();
 
 		condVar.notify_all();
